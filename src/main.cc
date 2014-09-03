@@ -112,7 +112,7 @@ void main() {
         assert(status);
     }
 
-    const int kMaxNumBullets = 128;
+    const int kMaxNumBullets = 1024;
     struct BulletGraphic {
         float x, y;
         float radius;
@@ -145,6 +145,7 @@ int main(int argc, char* argv[]) {
     std::uniform_real_distribution<float> random_angle(-M_PI / 2, M_PI / 2);
 
     InitOurShader();
+    glEnable(GL_BLEND);
 
     {
         ugdk::action::Scene* ourscene = new ugdk::action::Scene;
@@ -158,16 +159,7 @@ int main(int argc, char* argv[]) {
             bullets[i].radius = 0.0f;
         }
 
-        /*{
-            bullets[i].x = width_dist(e1);
-            bullets[i].y = height_dist(e1);
-            bullets[i].radius = radius_dist(e1);
-            bullets[i].r = color_dist(e1);
-            bullets[i].g = color_dist(e1);
-            bullets[i].b = color_dist(e1);
-        }*/
-
-        const double kNewBulletThreshold = 0.25;
+        const double kNewBulletThreshold = 0.001;
         double new_bullet_timer = 0.0;
 
         ourscene->AddTask([&](double dt) {
@@ -203,7 +195,7 @@ int main(int argc, char* argv[]) {
                     }
                     BulletLogic logic = {
                         speed.Rotate(angle),
-                        15.0,
+                        10.0,
                         new_bullet_id,
                     };
                     bullets[new_bullet_id].radius = radius_dist(e1);
