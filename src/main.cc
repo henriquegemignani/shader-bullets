@@ -136,12 +136,13 @@ int main(int argc, char* argv[]) {
     auto screen_size = graphic::manager()->screen()->size();
 
     std::default_random_engine e1(rd());
-    std::uniform_real_distribution<float> width_dist(screen_size.x * 0.1f, screen_size.x * 0.9f);
-    std::uniform_real_distribution<float> height_dist(screen_size.y * 0.1f, screen_size.y * 0.9f);
+    std::uniform_int_distribution<int> border_dist(0, 4);
+    std::uniform_real_distribution<float> width_dist(screen_size.x * 0.2f, screen_size.x * 0.8f);
+    std::uniform_real_distribution<float> height_dist(screen_size.y * 0.2f, screen_size.y * 0.8f);
     std::uniform_real_distribution<float> radius_dist(10.0f, 30.0f);
     std::uniform_real_distribution<float> color_dist(0.5f, 1.0f);
     std::uniform_real_distribution<float> random_speed(80.0f, 140.0f);
-    std::uniform_real_distribution<float> random_angle(0.0f, M_PI * 2.0);
+    std::uniform_real_distribution<float> random_angle(-M_PI / 2, M_PI / 2);
 
     InitOurShader();
 
@@ -188,17 +189,27 @@ int main(int argc, char* argv[]) {
                 int new_bullet_id = bulletGenerator.GenerateID();
                 if (new_bullet_id != bulletGenerator.error_value()) {
                     math::Vector2D speed(random_speed(e1), 0.0);
+                    int border = border_dist(e1);
+                    double angle = random_angle(e1) * 0.75;
+                    if (border < 3) {
+                        bullets[new_bullet_id].x = (border % 2 == 1) * screen_size.x;
+                        bullets[new_bullet_id].y = height_dist(e1);
+                        angle += M_PI * (border % 2 == 1);
+                    } else {
+                        angle += M_PI / 2;
+                        bullets[new_bullet_id].x = width_dist(e1);
+                        bullets[new_bullet_id].y = (border % 2 == 1) * screen_size.y;
+                        angle += M_PI * (border % 2 == 1);
+                    }
                     BulletLogic logic = {
-                        speed.Rotate(random_angle(e1)),
+                        speed.Rotate(angle),
                         15.0,
                         new_bullet_id,
                     };
-                    bullets[logic.id].x = width_dist(e1);
-                    bullets[logic.id].y = height_dist(e1);
-                    bullets[logic.id].radius = radius_dist(e1);
-                    bullets[logic.id].r = color_dist(e1);
-                    bullets[logic.id].g = color_dist(e1);
-                    bullets[logic.id].b = color_dist(e1);
+                    bullets[new_bullet_id].radius = radius_dist(e1);
+                    bullets[new_bullet_id].r = color_dist(e1);
+                    bullets[new_bullet_id].g = color_dist(e1);
+                    bullets[new_bullet_id].b = color_dist(e1);
                     bulletLogics.push_back(logic);
                 }
             }
