@@ -71,6 +71,20 @@ void Spiral(float t) {
     outputPosition(origin_pos + r * vec2(cos(ang), sin(ang)));
 }
 
+void CubicBezier(float time) {
+    VertexOut.radius = dataA.w;
+    VertexOut.color = dataA.xyz;
+
+    vec2 p0 = origin_pos;
+    vec2 p1 = dataB.xy;
+    vec2 p2 = dataB.zw;
+    vec2 p3 = dataC.xy;
+    float lifetime = dataC.z;
+
+    float t = time/lifetime;
+    outputPosition(pow(1 - t, 3) * p0 + 3*pow(1 - t, 2)*t* p1 + 3 * (1 - t) * t*t * p2 + t*t*t * p3);
+}
+
 void Invalid() {
     VertexOut.radius = 0.0;
     outputPosition(vec2(0, 0));
@@ -89,6 +103,9 @@ void main() {
             break;
         case 2:
             Spiral(t);
+            break;
+        case 3:
+            CubicBezier(t);
             break;
         default:
             Invalid();
@@ -211,14 +228,25 @@ int main(int argc, char* argv[]) {
             bullets[i].vertexPosition.type = 0.0f;
         }
 
-        for (int i = 0; i < 16; ++i) {
+        /*for (int i = 0; i < 16; ++i) {
             bullets[i].vertexPosition.origin_pos = glm::vec2(screen_size.x / 2.0, screen_size.y / 2.0);
-            bullets[i].vertexPosition.start_time = 0.0f;
+            bullets[i].vertexPosition.start_time = current_time;
             bullets[i].vertexPosition.type = 2.0f;
 
             bullets[i].dataA = glm::vec4(1.0, 1.0f, 0.0f, 50.0f);
             bullets[i].dataB = glm::vec4(20.0, 10.0f, 0.0f, 0.0f);
             bullets[i].dataC = glm::vec4((i/16.0) * 2 * M_PI, 1.0f, 0.0f, 0.0f);
+        }*/
+
+        {
+            int i = 17;
+            bullets[i].vertexPosition.origin_pos = glm::vec2(0.0f, 0.0f); //screen_size.x / 2.0, screen_size.y / 2.0);
+            bullets[i].vertexPosition.start_time = current_time;
+            bullets[i].vertexPosition.type = 3.0f;
+
+            bullets[i].dataA = glm::vec4(1.0, 1.0f, 0.0f, 50.0f);
+            bullets[i].dataB = glm::vec4(screen_size.x, 0.0f, 0.0f, screen_size.y);
+            bullets[i].dataC = glm::vec4(screen_size.x, screen_size.y, 20.0f, 0.0f);
         }
 
         const double kNewBulletThreshold = 0.001;
