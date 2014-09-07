@@ -30,9 +30,13 @@ namespace {
         Shader vertex_shader(GL_VERTEX_SHADER), geometry_shader(GL_GEOMETRY_SHADER), fragment_shader(GL_FRAGMENT_SHADER);
 
         vertex_shader.set_source(R"(#version 150
-in vec2 vertexPosition;
-in float radius;
-in vec3 color;
+in vec4 vertexPosition; // origin_pos.x, origin_pos.y, start_time, type
+in vec4 dataA;
+in vec4 dataB;
+in vec4 dataC;
+
+vec2 origin_pos;
+uniform float current_time;
 
 out VertexData {
     float radius;
@@ -40,10 +44,55 @@ out VertexData {
 } VertexOut;
 
 uniform mat4 geometry_matrix;
+void outputPosition(vec2 position) {
+    gl_Position = geometry_matrix * vec4(position,0,1);
+}
+
+void Polynomial(float t) {
+    VertexOut.radius = dataA.w;
+    VertexOut.color = dataA.xyz;
+ 
+    vec4 tExp = vec4(t, t*t, t*t*t, t*t*t*t);
+    vec4 vX = dataB * tExp;
+    vec4 vY = dataC * tExp;
+    outputPosition(origin_pos + vec2(vX.x + vX.y + vY.z + vY.w, vY.x + vY.y + vY.z + vY.w));
+}
+
+void Spiral(float t) {
+    VertexOut.radius = dataA.w;
+    VertexOut.color = dataA.xyz;
+
+    vec4 tExp = vec4(t, t*t, t*t*t, t*t*t*t);
+    vec4 vR = dataB * tExp;
+
+    float r = vR.x + vR.y + vR.z + vR.w;
+    float ang = dataC.x + t * dataC.y + t*t * dataC.z + t*t*t * dataC.w;
+ 
+    outputPosition(origin_pos + r * vec2(cos(ang), sin(ang)));
+}
+
+void Invalid() {
+    VertexOut.radius = 0.0;
+    outputPosition(vec2(0, 0));
+}
+
 void main() {
-    VertexOut.radius = radius;
-    VertexOut.color = color;
-    gl_Position = geometry_matrix * vec4(vertexPosition,0,1);
+    origin_pos = vertexPosition.xy;
+    float start_time = vertexPosition.z;
+    int type = int(vertexPosition.w);
+
+    float t = current_time - start_time;
+
+    switch(type) {
+        case 1:
+            Polynomial(t);
+            break;
+        case 2:
+            Spiral(t);
+            break;
+        default:
+            Invalid();
+    }
 }
 )");
 
@@ -51,7 +100,6 @@ void main() {
 layout(points) in;
 layout(triangle_strip, max_vertices=4) out;
 uniform mat4 geometry_matrix;
-uniform vec2 CANVAS_SIZE;
 
 in VertexData {
     float radius;
@@ -87,8 +135,6 @@ void main()
         // FRAGMENT
         fragment_shader.set_source(R"(#version 150
 
-uniform vec2 CANVAS_SIZE;
-
 in VertexData {
     vec2 dir;
     vec3 color;
@@ -114,9 +160,14 @@ void main() {
 
     const int kMaxNumBullets = 1024;
     struct BulletGraphic {
-        float x, y;
-        float radius;
-        float r, g, b;
+        struct {
+            glm::vec2 origin_pos;
+            float start_time;
+            float type;
+        } vertexPosition;
+        glm::vec4 dataA;
+        glm::vec4 dataB;
+        glm::vec4 dataC;
     };
 
     struct BulletLogic {
@@ -146,6 +197,7 @@ int main(int argc, char* argv[]) {
 
     InitOurShader();
     glEnable(GL_BLEND);
+    double current_time = 0.0;
 
     {
         ugdk::action::Scene* ourscene = new ugdk::action::Scene;
@@ -156,65 +208,34 @@ int main(int argc, char* argv[]) {
         std::list<BulletLogic> bulletLogics;
 
         for (int i = 0; i < kMaxNumBullets; ++i) {
-            bullets[i].radius = 0.0f;
+            bullets[i].vertexPosition.type = 0.0f;
+        }
+
+        for (int i = 0; i < 16; ++i) {
+            bullets[i].vertexPosition.origin_pos = glm::vec2(screen_size.x / 2.0, screen_size.y / 2.0);
+            bullets[i].vertexPosition.start_time = 0.0f;
+            bullets[i].vertexPosition.type = 2.0f;
+
+            bullets[i].dataA = glm::vec4(1.0, 1.0f, 0.0f, 50.0f);
+            bullets[i].dataB = glm::vec4(20.0, 10.0f, 0.0f, 0.0f);
+            bullets[i].dataC = glm::vec4((i/16.0) * 2 * M_PI, 1.0f, 0.0f, 0.0f);
         }
 
         const double kNewBulletThreshold = 0.001;
         double new_bullet_timer = 0.0;
 
         ourscene->AddTask([&](double dt) {
-            for (auto& logic : bulletLogics) {
-                logic.time_left -= dt;
-                bullets[logic.id].x += logic.speed.x * dt;
-                bullets[logic.id].y += logic.speed.y * dt;
-                if (logic.time_left < 0.0) {
-                    bullets[logic.id].radius = 0.0f;
-                    bulletGenerator.ReleaseID(logic.id);
-                }
-            }
-
-            bulletLogics.remove_if([](const BulletLogic& logic) { return logic.time_left < 0.0; });
-
-            new_bullet_timer += dt;
-            if (new_bullet_timer > kNewBulletThreshold) {
-                new_bullet_timer -= kNewBulletThreshold;
-                int new_bullet_id = bulletGenerator.GenerateID();
-                if (new_bullet_id != bulletGenerator.error_value()) {
-                    math::Vector2D speed(random_speed(e1), 0.0);
-                    int border = border_dist(e1);
-                    double angle = random_angle(e1) * 0.75;
-                    if (border < 3) {
-                        bullets[new_bullet_id].x = (border % 2 == 1) * screen_size.x;
-                        bullets[new_bullet_id].y = height_dist(e1);
-                        angle += M_PI * (border % 2 == 1);
-                    } else {
-                        angle += M_PI / 2;
-                        bullets[new_bullet_id].x = width_dist(e1);
-                        bullets[new_bullet_id].y = (border % 2 == 1) * screen_size.y;
-                        angle += M_PI * (border % 2 == 1);
-                    }
-                    BulletLogic logic = {
-                        speed.Rotate(angle),
-                        10.0,
-                        new_bullet_id,
-                    };
-                    bullets[new_bullet_id].radius = radius_dist(e1);
-                    bullets[new_bullet_id].r = color_dist(e1);
-                    bullets[new_bullet_id].g = color_dist(e1);
-                    bullets[new_bullet_id].b = color_dist(e1);
-                    bulletLogics.push_back(logic);
-                }
-            }
-
+            current_time += dt;
         });
 
         ourscene->set_render_function([&](graphic::Canvas& canvas) {
             canvas.ChangeShaderProgram(shaderprog);
-            canvas.SendUniform("CANVAS_SIZE", canvas.size());
+            canvas.SendUniform("current_time", static_cast<float>(current_time));
 
-            canvas.SendVertexData(data, graphic::VertexType::VERTEX, 0, 2);
-            canvas.SendVertexData(data, graphic::VertexType::TEXTURE, sizeof(float) * 2, 1);
-            canvas.SendVertexData(data, graphic::VertexType::COLOR, sizeof(float) * 3, 3);
+            canvas.SendVertexData(data, graphic::VertexType::VERTEX,  offsetof(BulletGraphic, vertexPosition), 4);
+            canvas.SendVertexData(data, graphic::VertexType::TEXTURE, offsetof(BulletGraphic, dataA), 4);
+            canvas.SendVertexData(data, graphic::VertexType::COLOR,   offsetof(BulletGraphic, dataB), 4);
+            canvas.SendVertexData(data, graphic::VertexType::CUSTOM1, offsetof(BulletGraphic, dataC), 4);
             shaderprog->Validate();
 
             canvas.DrawArrays(graphic::DrawMode::POINTS(), 0, kMaxNumBullets);
